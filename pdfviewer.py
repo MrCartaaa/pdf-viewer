@@ -37,6 +37,8 @@ And just what is that?  Well, it's LPGL3+ and these FOUR simple stipulations.
 """
 
 import os
+import shutil
+import uuid
 import fitz
 import PySimpleGUI as sg
 import webbrowser as wb
@@ -88,6 +90,121 @@ STOP_N = b'iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAAAXNSR0IArs4c6QAAAARnQ
 annot_indexes = [-1, -1, 0]
 G_SIZE = (770, 590)
 
+class CSAdditions:
+
+    def __init__(self):
+        self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
+        self.working_dir = self.base_dir+'personal/Material INBOX/'
+        self.buttons = {'steeleco': 'Steele Co',
+                        'maetech': 'Maetech',
+                        'personal': 'Personal',
+                        'none': 'Delete',
+                        'pass': 'Next'}
+        self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
+        self.engage_buttons = {'Steele Co': CSEvent.file_steele_co,
+                               'Maetech': CSEvent.file_maetech,
+                               'Personal': CSEvent.file_personal,
+                               'Delete': CSEvent.delete_file,
+                               'Next': CSEvent.next}
+        self.filing_dirs = {'Maetech': self.base_dir+'371 - 1000482371 Ontario Corporation/',
+                            'Steele Co': self.base_dir+'945 - 1000486945 Ontario Corporation/',
+                            'Personal': self.base_dir+'personal/',
+                            'Delete': 'None',
+                            'Next': ''}
+
+    def verify_buttons(self, event, filepath):
+        if event in self.engage_buttons:
+            print('')
+            return *self.engage_buttons[event](filepath, self.filing_dirs[event]), True
+        else:
+            return True, None, False
+
+    def create_organizer_gui(self):
+        pad = ((5, 5), (0, 3))
+
+        cs_organizer_col = [
+            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+            *[sg.Button(x, pad=pad) for x in self.buttons.values()]
+        ]
+        return cs_organizer_col
+
+
+class CSEvent:
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def file_steele_co(filepath, newpath):
+        print('filing to steele co...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def file_maetech(filepath, newpath):
+        print('filing to maetech...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def file_personal(filepath, newpath):
+        print('filing to personal...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def delete_file(filepath, newpath):
+        print('deleting file...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def next(filepath, _):
+        print('Pass, next file.')
+        cs_additions.file_list = [f for f in cs_additions.file_list if filepath != f]
+        return True, None
+
+    @staticmethod
+    def archive(filepath, newpath):
+
+        def _os_remove_file(filepath):
+            print('WARNING: permanently removing file from the path...')
+
+            try:
+                os.remove(filepath)
+
+            except Exception as ex:
+                print(f'unable to remove file: {ex}')
+                return False, 'unable to remove file.'
+
+            print(f'file removed: {filepath.split("/")[-1]}')
+            return True, None
+
+        def _os_add_file(oldfilepath, newfilepath):
+            print(f'Adding file to path: {newfilepath.split("/")[-2]}...')
+            try:
+                dst = newfilepath+'filing_material/'+str(uuid.uuid4())+'.pdf'
+                if os.path.exists(newfilepath+'filing_material/'+str(uuid.uuid4())):
+                    return False, 'unable to save file: already exists.'
+                shutil.copyfile(oldfilepath, dst)
+            except Exception as ex:
+                print(f'unable to add file: {ex}')
+                return False, 'unable to add file.'
+            print(f'file added to {newfilepath.split("/")[-2]}: {dst.split("/")[-1]}')
+            return True, None
+
+        if newpath != 'None':
+            file_added, err = _os_add_file(filepath, newpath)
+        else:
+            file_added = 'N/A'
+
+        if file_added:
+            file_removed, err = _os_remove_file(filepath)
+            if file_removed:
+                cs_additions.file_list = [f for f in cs_additions.file_list if filepath != f]
+                return True, None
+
+        return False, err
+
+
+cs_additions = CSAdditions()
+
 
 class PDFViewer:
     """
@@ -99,7 +216,7 @@ class PDFViewer:
         Constructor for PDFViewer class
         """
         self.document = None
-        self.filename = ""
+        self.filename = cs_additions.file_list[0]
         self.mode = 1  # day,
         self.total_pages = 0
         self.pages = None
@@ -119,6 +236,8 @@ class PDFViewer:
         self.scroll_page = False
         self.perv_img_size = [0, 0]
         self.custom_search_option = 'simple'
+        self.clear_window()
+        self.fill_window()
 
     def clear_window(self):
         """
@@ -141,7 +260,7 @@ class PDFViewer:
         self.win['-FIND_TEXT-']('')
         annot_indexes, self.text_found_pages = 0, [-1, -1, 0]
         self.searching = False
-        self.filename = ''
+        self.filename = cs_additions.file_list[0]
         self.image_data = [0, 0, 0]
 
     def fill_window(self):
@@ -152,6 +271,7 @@ class PDFViewer:
         try:
             self.document = fitz.open(self.filename)
         except Exception as ex:
+            print(f'unable to open file: {ex}')
             self.show_popup("Sorry this file can't be opened.")
             return
         self.total_pages = len(self.document)
@@ -502,6 +622,8 @@ class PDFViewer:
                     element_justification='c',
                 ),
             ],
+
+            cs_additions.create_organizer_gui(),
         ]
 
     def create_reader_gui(self):
@@ -871,7 +993,7 @@ class PDFViewer:
         """
         self.save_note()
         with open(self.filename.split('/')[-1].split('.')[0] + '_notes.txt', 'w', encoding="utf-8") as note_file:
-            note_file.write('\t\tاس File میں ترمیم نہ کریں\n\n')
+            note_file.write('')
             for page, note in self.notes.items():
                 if note and note.split():
                     underline = ''.join(['=' for _ in range(len(str(page)) + 1)])
@@ -994,6 +1116,19 @@ class PDFViewer:
                         self.update_custom_search(1)
                     elif 'Whole word' in value['-BTN_DOTS-']:
                         self.update_custom_search(0)
+                else:
+                    archived = False
+                    actioned = False
+                    err = 'unknown err'
+                    try:
+                        archived, err, actioned = cs_additions.verify_buttons(evt, self.filename)
+                    except Exception as ex:
+                        print(f'unknown error: {ex}')
+                    if archived and actioned:
+                        self.clear_window()
+                        self.fill_window()
+                    elif err:
+                        self.show_popup(err)
 
                 if self.filename:
                     if event.enter():
