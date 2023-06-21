@@ -44,6 +44,8 @@ import PySimpleGUI as sg
 import webbrowser as wb
 from threading import Thread
 
+from pdf_splitter import split_pages
+
 DEF_PAD = sg.DEFAULT_ELEMENT_PADDING
 LOGO = b'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'
 CLOSE = b'iVBORw0KGgoAAAANSUhEUgAAACEAAAAhCAMAAABgOjJdAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAFHUExURQAAAAAAAP///wAAAAAAAAAAAAAAAAAAAAAAAAAAABQUFAAAAAAAAA8PDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUFBQAAAAUFBQAAAAAAAAAAAAAAAAAAAAAAAAQEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICAgAAAAAAAAAAAAAAAAAAAAICAgAAAAICAgAAAAAAAAICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQAAAAAAAAEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAEBARsYxhIAAABrdFJOUwABAQIDBAkLDA0NDhERFxgZHCEjJScoKSstLjAwMTI5Ojs8QkNDREpLTFhpbG5ydXd4e3x9fn6AgYKDhIWGhoeIiImkqLS2t72+v8DBw8TFxsfI09jZ2dze4OHi5ufo6evx9Pf4+fr7+/z9HaXqzQAAAAlwSFlzAAALEgAACxIB0t1+/AAAAa1JREFUOE91U+dfwjAQvVgUt7hAxQpCcePCXQduBbeiAiLuovX//+zlki6tL3CXXN7v3V2SAjAOsmIqYS1AMvjkFxRrQzg2MDbqwXiPI8KNor9+Gh6Y+444t6OvUz2RSBiHNN0Hl8Aoj8gCa/dtIrmN3StvluXvyf6oOqiqURzc9B1edwUkgRhLJtZRkyUQvs1Sr9AXjLW7WDI1ojlIJaY/VDdDLzTy5G4kjUHJIKsXmnEiz4gAWk1oyEr12yb0go6e/1NGlJYox61eaAIIrgzTQklPgAKazSBLjIajahwwMm+m0WmGN0uhBYMdZ5U4Jyxg0E8DXej8ITZLBB8NZCgM2nMv73Mi5GjYDOwVYMN8xlqw8X+yQOZrK1eJkZxvpZAxM9BxUUWKb6UAi0gApDzxpn0qhdbTRf46IZRfhTq/ShlrrafnC8EgnanPzdGcg8+1mtCwstDN1VFE4PfNrd80gofwp5eZSjtyPUiKXrBy0gg/5jez2ewODjLbO/re25BLg0HiuFwqulAqlk865R45BQ8ioATw5zK0Lyv9B65vjsP9jMXCEvEaC3aEwQ8SIlBGc1pXAwAAAABJRU5ErkJggg=='
@@ -93,24 +95,30 @@ G_SIZE = (770, 590)
 class CSAdditions:
 
     def __init__(self):
-        self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
-        self.working_dir = self.base_dir+'personal/Material INBOX/'
+        # self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
+        # self.working_dir = self.base_dir+'personal/Material INBOX/'
+        self.base_dir = '/mnt/c/Users/CarterSteele/Desktop/'
+        self.working_dir = '/mnt/c/Users/CarterSteele/Documents/'
         self.buttons = {'steeleco': 'Steele Co',
                         'maetech': 'Maetech',
                         'personal': 'Personal',
                         'none': 'Delete',
-                        'pass': 'Next'}
+                        'pass': 'Next',
+                        'split': 'Split'
+                        }
         self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
         self.engage_buttons = {'Steele Co': CSEvent.file_steele_co,
                                'Maetech': CSEvent.file_maetech,
                                'Personal': CSEvent.file_personal,
                                'Delete': CSEvent.delete_file,
-                               'Next': CSEvent.next}
+                               'Next': CSEvent.next,
+                               'Split': self.split}
         self.filing_dirs = {'Maetech': self.base_dir+'371 - 1000482371 Ontario Corporation/',
                             'Steele Co': self.base_dir+'945 - 1000486945 Ontario Corporation/',
                             'Personal': self.base_dir+'personal/',
                             'Delete': 'None',
-                            'Next': ''}
+                            'Next': '',
+                            "Split": self.working_dir}
 
     def verify_buttons(self, event, filepath):
         if event in self.engage_buttons:
@@ -118,6 +126,12 @@ class CSAdditions:
             return *self.engage_buttons[event](filepath, self.filing_dirs[event]), True
         else:
             return True, None, False
+
+    def split(self, *args, **kwargs):
+        s,d=CSEvent.split(*args, **kwargs)
+        if s:
+            self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
+        return s,d
 
     def create_organizer_gui(self):
         pad = ((5, 5), (0, 3))
@@ -159,6 +173,16 @@ class CSEvent:
         print('Pass, next file.')
         cs_additions.file_list = [f for f in cs_additions.file_list if filepath != f]
         return True, None
+
+    @staticmethod
+    def split(filepath, _):
+        print('Splitting')
+        success = split_pages(filepath)
+        if success:
+            return CSEvent.archive(filepath, 'None')
+        else:
+            return False, 'unable to split'
+
 
     @staticmethod
     def archive(filepath, newpath):
