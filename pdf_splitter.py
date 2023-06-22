@@ -5,6 +5,7 @@ from pikepdf import Pdf
 def split_pages(filename):
     # the target PDF document to split
     try:
+        rtn_files = []
         # load the PDF file
         pdf = Pdf.open(filename)
         # make the new splitted PDF files
@@ -22,10 +23,11 @@ def split_pages(filename):
             # save the PDF file
             new_pdf_files[n].save(output_filename)
             print(f"[+] File: {output_filename} saved.")
+            rtn_files.append(output_filename)
     except:
-        return False
+        return False, None
 
-    return True
+    return True, rtn_files
 
 if __name__ == '__main__':
     filename = "/mnt/c/Users/CarterSteele/Documents/Receipt_20230621_0001.pdf"

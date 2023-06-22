@@ -95,10 +95,10 @@ G_SIZE = (770, 590)
 class CSAdditions:
 
     def __init__(self):
-        # self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
-        # self.working_dir = self.base_dir+'personal/Material INBOX/'
-        self.base_dir = '/mnt/c/Users/CarterSteele/Desktop/'
-        self.working_dir = '/mnt/c/Users/CarterSteele/Documents/'
+        self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
+        self.working_dir = self.base_dir+'personal/Material INBOX/'
+        # self.base_dir = '/mnt/c/Users/CarterSteele/Desktop/'
+        # self.working_dir = '/mnt/c/Users/CarterSteele/Documents/'
         self.buttons = {'steeleco': 'Steele Co',
                         'maetech': 'Maetech',
                         'personal': 'Personal',
@@ -106,7 +106,7 @@ class CSAdditions:
                         'pass': 'Next',
                         'split': 'Split'
                         }
-        self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
+        self.file_list = sorted([self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f], key=os.path.getctime)
         self.engage_buttons = {'Steele Co': CSEvent.file_steele_co,
                                'Maetech': CSEvent.file_maetech,
                                'Personal': CSEvent.file_personal,
@@ -130,7 +130,8 @@ class CSAdditions:
     def split(self, *args, **kwargs):
         s,d=CSEvent.split(*args, **kwargs)
         if s:
-            self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
+            self.file_list.pop()
+            self.file_list += d
         return s,d
 
     def create_organizer_gui(self):
@@ -171,15 +172,16 @@ class CSEvent:
     @staticmethod
     def next(filepath, _):
         print('Pass, next file.')
-        cs_additions.file_list = [f for f in cs_additions.file_list if filepath != f]
+        cs_additions.file_list.pop()
         return True, None
 
     @staticmethod
     def split(filepath, _):
         print('Splitting')
-        success = split_pages(filepath)
+        success, d = split_pages(filepath)
         if success:
-            return CSEvent.archive(filepath, 'None')
+            CSEvent.archive(filepath, 'None')
+            return True, d
         else:
             return False, 'unable to split'
 
@@ -221,7 +223,7 @@ class CSEvent:
         if file_added:
             file_removed, err = _os_remove_file(filepath)
             if file_removed:
-                cs_additions.file_list = [f for f in cs_additions.file_list if filepath != f]
+                cs_additions.file_list.pop()
                 return True, None
 
         return False, err
@@ -240,7 +242,7 @@ class PDFViewer:
         Constructor for PDFViewer class
         """
         self.document = None
-        self.filename = cs_additions.file_list[0]
+        self.filename = cs_additions.file_list[-1]
         self.mode = 1  # day,
         self.total_pages = 0
         self.pages = None
@@ -284,7 +286,7 @@ class PDFViewer:
         self.win['-FIND_TEXT-']('')
         annot_indexes, self.text_found_pages = 0, [-1, -1, 0]
         self.searching = False
-        self.filename = cs_additions.file_list[0]
+        self.filename = cs_additions.file_list[-1]
         self.image_data = [0, 0, 0]
 
     def fill_window(self):
@@ -315,6 +317,10 @@ class PDFViewer:
         self.update_image()
         self.update_cur_page()
         self.win['-TOTAL_PAGES-'](value="/ {}".format(self.total_pages))
+        if self.total_pages > 1:
+            self.win['-MULTIPLE_PAGES-'](value="MULTIPLE PAGES")
+        else:
+            self.win['-MULTIPLE_PAGES-'](value='')
         self.win.TKroot.title('{} | PyPDFViewer'.format(self.filename.split('/')[-1]))
         self.win['-ZOOM_VAL-']('100')
 
@@ -569,6 +575,16 @@ class PDFViewer:
                             ),
                         ],
                         [
+
+            sg.T('MULTIPLE PAGES' if self.total_pages > 1 else "",
+                 k='-MULTIPLE_PAGES-', size=(16, 1),
+                 background_color='yellow' if self.total_pages > 1 else 'grey55',
+                 justification="center",
+                 text_color="red" if self.mode else 'yellow',
+                 enable_events=True,
+                 font="Consolas 11",
+                 pad=DEF_PAD),],
+                        [
                             sg.Image(
                                 data=BLANK,
                                 k="-IMAGE-",
@@ -646,7 +662,6 @@ class PDFViewer:
                     element_justification='c',
                 ),
             ],
-
             cs_additions.create_organizer_gui(),
         ]
 
@@ -1112,10 +1127,10 @@ class PDFViewer:
                     break
                 event = self.Event(evt)
                 if event.quit():
-                    if self.close_popup("Do you want to close the PDF Viewer?") == 'Yes':
-                        self.save_notes_to_file()
-                        self.win.close()
-                        break
+                    # if self.close_popup("Do you want to close the PDF Viewer?") == 'Yes':
+                    self.save_notes_to_file()
+                    self.win.close()
+                    break
                 change_page = False
 
                 if event.scroll_start():
