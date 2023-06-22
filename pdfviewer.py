@@ -99,26 +99,35 @@ class CSAdditions:
         self.working_dir = self.base_dir+'personal/Material INBOX/'
         # self.base_dir = '/mnt/c/Users/CarterSteele/Desktop/'
         # self.working_dir = '/mnt/c/Users/CarterSteele/Documents/'
-        self.buttons = {'steeleco': 'Steele Co',
-                        'maetech': 'Maetech',
-                        'personal': 'Personal',
-                        'none': 'Delete',
-                        'pass': 'Next',
-                        'split': 'Split'
-                        }
-        self.file_list = sorted([self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f], key=os.path.getctime)
+        self.buttons = ['Steele Co',
+                        'Maetech',
+                        'Personal',
+                        'Personal Tax',
+                        'Other',
+                        'Split',
+                        'Next',
+                        'Delete',
+                        'Refresh'
+                        ]
+        self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
         self.engage_buttons = {'Steele Co': CSEvent.file_steele_co,
                                'Maetech': CSEvent.file_maetech,
                                'Personal': CSEvent.file_personal,
+                               'Personal Tax': CSEvent.file_personal_tax,
+                               'Other': CSEvent.file_other,
                                'Delete': CSEvent.delete_file,
                                'Next': CSEvent.next,
-                               'Split': self.split}
+                               'Split': self.split,
+                               'Refresch': self.refresh}
         self.filing_dirs = {'Maetech': self.base_dir+'371 - 1000482371 Ontario Corporation/',
                             'Steele Co': self.base_dir+'945 - 1000486945 Ontario Corporation/',
                             'Personal': self.base_dir+'personal/',
+                            'Personal Tax': self.base_dir + 'personal/tax_',
+                            'Other': self.base_dir+'personal/other_',
                             'Delete': 'None',
                             'Next': '',
-                            "Split": self.working_dir}
+                            "Split": self.working_dir,
+                            'Refresh': ''}
 
     def verify_buttons(self, event, filepath):
         if event in self.engage_buttons:
@@ -134,12 +143,26 @@ class CSAdditions:
             self.file_list += d
         return s,d
 
+    def refresh(self, *args, **kwargs):
+        self.file_list = sorted([self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f], key=os.path.getctime)
+        return True, None
+
     def create_organizer_gui(self):
-        pad = ((5, 5), (0, 3))
+        pad = ((7, 7), (7, 7))
+        size = (10, 5)
 
         cs_organizer_col = [
             [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
-            *[sg.Button(x, pad=pad) for x in self.buttons.values()]
+            [sg.Button(x, pad=pad, size=size) for x in self.buttons[:2]],
+
+
+            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+            [sg.Button(x, pad=pad, size=size) for x in self.buttons[2:5]],
+
+
+            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+            [sg.Button(x, pad=pad, size=size) for x in self.buttons[5:]],
+
         ]
         return cs_organizer_col
 
@@ -162,6 +185,16 @@ class CSEvent:
     @staticmethod
     def file_personal(filepath, newpath):
         print('filing to personal...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def file_other(filepath, newpath):
+        print('filing to other...')
+        return CSEvent.archive(filepath, newpath)
+
+    @staticmethod
+    def file_personal_tax(filepath, newpath):
+        print('filing to personal tax...')
         return CSEvent.archive(filepath, newpath)
 
     @staticmethod
@@ -318,9 +351,9 @@ class PDFViewer:
         self.update_cur_page()
         self.win['-TOTAL_PAGES-'](value="/ {}".format(self.total_pages))
         if self.total_pages > 1:
-            self.win['-MULTIPLE_PAGES-'](value="MULTIPLE PAGES")
+            self.win['-MULTIPLE_PAGES-'](visible=True)
         else:
-            self.win['-MULTIPLE_PAGES-'](value='')
+            self.win['-MULTIPLE_PAGES-'](visible=False)
         self.win.TKroot.title('{} | PyPDFViewer'.format(self.filename.split('/')[-1]))
         self.win['-ZOOM_VAL-']('100')
 
@@ -575,16 +608,6 @@ class PDFViewer:
                             ),
                         ],
                         [
-
-            sg.T('MULTIPLE PAGES' if self.total_pages > 1 else "",
-                 k='-MULTIPLE_PAGES-', size=(16, 1),
-                 background_color='yellow' if self.total_pages > 1 else 'grey55',
-                 justification="center",
-                 text_color="red" if self.mode else 'yellow',
-                 enable_events=True,
-                 font="Consolas 11",
-                 pad=DEF_PAD),],
-                        [
                             sg.Image(
                                 data=BLANK,
                                 k="-IMAGE-",
@@ -595,7 +618,7 @@ class PDFViewer:
                             )
                         ],
                     ],
-                    size=(770, 600),
+                    size=(2000, 700),
                     scrollable=True,
                     element_justification='center',
                     background_color='grey55' if self.mode else 'black',
@@ -662,6 +685,14 @@ class PDFViewer:
                     element_justification='c',
                 ),
             ],
+            [sg.T('MULTIPLE PAGES',
+                 k='-MULTIPLE_PAGES-', size=(16, 2),
+                 background_color='yellow',
+                 justification="center",
+                 text_color="red",
+                 enable_events=True,
+                 font="Consolas 11",
+                 pad=DEF_PAD)],
             cs_additions.create_organizer_gui(),
         ]
 
@@ -733,7 +764,7 @@ class PDFViewer:
             try:
                 mat = (0.8125 * float(self.win['-ZOOM_VAL-'].get())) / 100
             except ValueError as error:
-                mat = self.max_page_size[1] / size.height
+                mat = self.max_page_size[1] / size.height *2
 
         zoom_mat = fitz.Matrix(mat, mat)
         pix = page.get_pixmap(matrix=zoom_mat, alpha=False)
