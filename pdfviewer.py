@@ -42,6 +42,9 @@ import uuid
 import fitz
 import PySimpleGUI as sg
 import webbrowser as wb
+import pyperclip
+import datetime as dt
+from csv import writer
 from threading import Thread
 
 from pdf_splitter import split_pages
@@ -96,9 +99,11 @@ class CSAdditions:
 
     def __init__(self):
         self.base_dir = '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/'
-        self.working_dir = self.base_dir+'personal/Material INBOX/'
-        # self.base_dir = '/mnt/c/Users/CarterSteele/Desktop/'
-        # self.working_dir = '/mnt/c/Users/CarterSteele/Documents/'
+        # self.working_dir = self.base_dir+'personal/Material INBOX/'
+        self.working_dir = self.base_dir+'371 - 1000482371 Ontario Corporation/filing_material/2016/'
+        # self.working_dir = self.base_dir+'945 - 1000486945 Ontario Corporation/filing_material/'
+        # self.working_dir = self.base_dir+'personal/tax_filing_material/'
+        self.date_scope = [x for x in range(2015, 2024) if str(x) in self.working_dir][0]
         self.buttons = ['Steele Co',
                         'Maetech',
                         'Personal',
@@ -107,9 +112,23 @@ class CSAdditions:
                         'Split',
                         'Next',
                         'Delete',
+                        'Re-File',
                         'Refresh'
                         ]
-        self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f]
+        self.exp_buttons = {'Meals': 'meals_entertainment',
+                            'Advertising': 'advertising',
+                            'Transportation': 'transportation',
+                            'Utilities & Telephone': 'utilities_telephone',
+                            'General Expense': 'general_exp',
+                            'Donations': 'donations',
+                            'Equipment': 'equipment',
+                            'Intellectual Material': 'intel',
+                            'Payments/Receipts': 'receipts',
+                            'Invoices/Deposits': 'invoices',
+                            'Training, Research & Development': 'training_rd',
+                            'Software': 'software'
+                            }
+        self.file_list = [self.working_dir+f for f in os.listdir(self.working_dir) if ('.pdf' in f) or ('.PDF' in f)]
         self.engage_buttons = {'Steele Co': CSEvent.file_steele_co,
                                'Maetech': CSEvent.file_maetech,
                                'Personal': CSEvent.file_personal,
@@ -118,7 +137,10 @@ class CSAdditions:
                                'Delete': CSEvent.delete_file,
                                'Next': CSEvent.next,
                                'Split': self.split,
-                               'Refresch': self.refresh}
+                               'Refresh': self.refresh,
+                               'Re-File': CSEvent.refile,
+                               'Years': CSEvent.file_year,
+                               'Exp_Cat': CSEvent.file_exp_cat}
         self.filing_dirs = {'Maetech': self.base_dir+'371 - 1000482371 Ontario Corporation/',
                             'Steele Co': self.base_dir+'945 - 1000486945 Ontario Corporation/',
                             'Personal': self.base_dir+'personal/',
@@ -127,14 +149,66 @@ class CSAdditions:
                             'Delete': 'None',
                             'Next': '',
                             "Split": self.working_dir,
-                            'Refresh': ''}
+                            'Refresh': '',
+                            'Re-File': '/mnt/c/Users/CarterSteele/Dropbox/Master/steele_company/clients/steele/personal/Material INBOX/'}
 
-    def verify_buttons(self, event, filepath):
+    def verify_buttons(self, event, filepath, win=None):
         if event in self.engage_buttons:
             print('')
             return *self.engage_buttons[event](filepath, self.filing_dirs[event]), True
+        elif event in [str(x) for x in range(2015, 2024)]:
+            print('')
+            print(f'got event from year: {event} with file {filepath}')
+            return *self.engage_buttons['Years'](filepath, self.working_dir+event+'/'), True
+        elif event in self.exp_buttons.keys():
+            print('')
+            print(f'got button!: {event} -> {self.exp_buttons[event]}')
+            try:
+                amount = eval(win['-FILE_AMOUNT-'].get())
+                if amount == 0:
+                    raise Exception('value must not be Zero.')
+                vendor = (win['-FILE_VENDOR-'].get())
+                date = dt.datetime.strptime(win['-FILE_DATE-'].get()+'-'+str(self.date_scope), '%m-%d-%Y').date()
+                comment = win['-FILE_COMMENT-'].get()
+            except Exception as e:
+                print(f'unknown error: {e}')
+                return False, f'unable to verify inputs: {e}', False
+            filename = filepath.split('/')[-1]
+            print(f'got trx, {filename}: {amount}, {vendor}, {date}')
+            newpath = self.working_dir+self.exp_buttons[event]+'/'
+            archived, err = self.engage_buttons['Exp_Cat'](filepath, newpath, filename)
+            if not archived:
+                return False, err, False
+
+            recorded, err = self.append_summary_sheet(newpath, filename, amount, vendor, date, comment)
+            if not recorded:
+                return False, err, False
+
+            win['-FILE_AMOUNT-']('')
+            win['-FILE_VENDOR-']('')
+            win['-FILE_DATE-']('')
+            win['-FILE_COMMENT-']('')
+
+            return True, None, True
         else:
             return True, None, False
+
+    def append_summary_sheet(self, newpath, filename, amount, vendor, date, comment):
+        summary_file = newpath+'summary.csv'
+        try:
+            if not os.path.isfile(summary_file):
+                with open(summary_file, "w") as f:
+                    r = writer(f)
+                    r.writerow(['file_name', 'date', 'vendor', 'amount', 'comment'])
+                    f.close()
+            with open(summary_file, 'a') as f:
+                r = writer(f)
+                r.writerow([filename, date, vendor, amount, comment])
+                f.close
+        except Exception as e:
+            print(f'unhandled exception: {e}')
+            return False, e
+        return True, None
 
     def split(self, *args, **kwargs):
         s,d=CSEvent.split(*args, **kwargs)
@@ -144,26 +218,41 @@ class CSAdditions:
         return s,d
 
     def refresh(self, *args, **kwargs):
-        self.file_list = sorted([self.working_dir+f for f in os.listdir(self.working_dir) if '.pdf' in f], key=os.path.getctime)
+        self.file_list = sorted([self.working_dir+f for f in os.listdir(self.working_dir) if ('.pdf' in f) or ('.PDF' in f)], key=os.path.getctime)
         return True, None
 
     def create_organizer_gui(self):
         pad = ((7, 7), (7, 7))
         size = (10, 5)
 
-        cs_organizer_col = [
-            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
-            [sg.Button(x, pad=pad, size=size) for x in self.buttons[:2]],
+        if 'personal/Material INBOX/' in self.working_dir:
+            cs_organizer_col = [
+                [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+                [sg.Button(x, pad=pad, size=size) for x in self.buttons[:5]],
+            ]
+
+        elif True in [x for x in range(2015, 2024) if str(x) in self.working_dir]:
+            cs_organizer_col = [
+                [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+                [sg.Button(x, pad=pad, size=size) for x in range(2015, 2024)],]
+
+        else:
+            cs_organizer_col = [
 
 
-            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
-            [sg.Button(x, pad=pad, size=size) for x in self.buttons[2:5]],
+             [sg.T('date mm-dd '), sg.Input(k='-FILE_DATE-', focus=True),],
+             [sg.T('vendor     '), sg.Input(k='-FILE_VENDOR-')],
+             [sg.T('amount     '), sg.Input(k='-FILE_AMOUNT-'),],
+             [sg.T('comment    '), sg.Input(k='-FILE_COMMENT-'),],
+                [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+                [sg.Button(x, pad=pad, size=size) for x in self.exp_buttons],
+            ]
 
+        cs_organizer_col += [
+                [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
+                [sg.Button(x, pad=pad, size=size) for x in self.buttons[5:]],
 
-            [sg.HorizontalSeparator(pad=((5, 5), (0, 3)))],
-            [sg.Button(x, pad=pad, size=size) for x in self.buttons[5:]],
-
-        ]
+            ]
         return cs_organizer_col
 
 
@@ -209,6 +298,21 @@ class CSEvent:
         return True, None
 
     @staticmethod
+    def refile(filepath, newpath):
+        print('refiling...')
+        return CSEvent.archive(filepath, newpath, autofile_in_filing_material=False)
+
+    @staticmethod
+    def file_year(filepath, year):
+        print(f'filing file {filepath} to folder {year}')
+        return CSEvent.archive(filepath, year, autofile_in_filing_material=False)
+
+    @staticmethod
+    def file_exp_cat(filepath, cat, filename):
+        print(f'filing file {filepath} to folder {cat}')
+        return CSEvent.archive(filepath, cat, autofile_in_filing_material=False, override_name=filename)
+
+    @staticmethod
     def split(filepath, _):
         print('Splitting')
         success, d = split_pages(filepath)
@@ -220,7 +324,7 @@ class CSEvent:
 
 
     @staticmethod
-    def archive(filepath, newpath):
+    def archive(filepath, newpath, autofile_in_filing_material=True, override_name=None):
 
         def _os_remove_file(filepath):
             print('WARNING: permanently removing file from the path...')
@@ -235,12 +339,21 @@ class CSEvent:
             print(f'file removed: {filepath.split("/")[-1]}')
             return True, None
 
-        def _os_add_file(oldfilepath, newfilepath):
+        def _os_add_file(oldfilepath, newfilepath, autofile_in_filing_material=True, override_name=None):
             print(f'Adding file to path: {newfilepath.split("/")[-2]}...')
+            newfilename = str(uuid.uuid4()) if override_name is None else override_name.replace('.pdf', '')
+
             try:
-                dst = newfilepath+'filing_material/'+str(uuid.uuid4())+'.pdf'
-                if os.path.exists(newfilepath+'filing_material/'+str(uuid.uuid4())):
-                    return False, 'unable to save file: already exists.'
+                if autofile_in_filing_material:
+                    dst = newfilepath+'filing_material/'+newfilename+'.pdf'
+                    if os.path.exists(newfilepath+'filing_material/'+newfilename+'.pdf'):
+                        return False, 'unable to save file: already exists.'
+                else:
+                    if not os.path.exists(newfilepath):
+                        os.makedirs(newfilepath)
+                    dst = newfilepath+newfilename+'.pdf'
+                    if os.path.exists(newfilepath+newfilename+'.pdf'):
+                        return False, 'unable to save file: already exists.'
                 shutil.copyfile(oldfilepath, dst)
             except Exception as ex:
                 print(f'unable to add file: {ex}')
@@ -249,7 +362,9 @@ class CSEvent:
             return True, None
 
         if newpath != 'None':
-            file_added, err = _os_add_file(filepath, newpath)
+            file_added, err = _os_add_file(filepath, newpath,
+                                           autofile_in_filing_material=autofile_in_filing_material,
+                                           override_name=override_name)
         else:
             file_added = 'N/A'
 
@@ -685,14 +800,17 @@ class PDFViewer:
                     element_justification='c',
                 ),
             ],
-            [sg.T('MULTIPLE PAGES',
+             [sg.T('MULTIPLE PAGES',
                  k='-MULTIPLE_PAGES-', size=(16, 2),
                  background_color='yellow',
                  justification="center",
                  text_color="red",
                  enable_events=True,
                  font="Consolas 11",
-                 pad=DEF_PAD)],
+                 pad=DEF_PAD), sg.T(self.filename.split('/')[-1],
+                    text_color="black" if self.mode else 'white',
+                    background_color="lightgrey" if self.mode else 'black',)
+              ],
             cs_additions.create_organizer_gui(),
         ]
 
@@ -1191,12 +1309,14 @@ class PDFViewer:
                     actioned = False
                     err = 'unknown err'
                     try:
-                        archived, err, actioned = cs_additions.verify_buttons(evt, self.filename)
+                        archived, err, actioned = cs_additions.verify_buttons(evt, self.filename, win=self.win)
                     except Exception as ex:
                         print(f'unknown error: {ex}')
                     if archived and actioned:
                         self.clear_window()
                         self.fill_window()
+
+                        self.win['-FILE_DATE-'].Widget.config(takefocus=1)
                     elif err:
                         self.show_popup(err)
 
